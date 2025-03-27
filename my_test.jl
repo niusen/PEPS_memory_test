@@ -59,7 +59,7 @@ end
 
 function main()
     #load U(1) symmetric tensor and then produce PEPS on a finite cluster
-    filenm="CSL_D"*string(D)*"_U1";
+    filenm="PEPS_D"*string(D)*"_U1";
     psi0,Vp,Vv=load_fPEPS_from_iPEPS(Lx,Ly,filenm,false);
     global psi_decomposed, Vp
     normalize_PEPS!(psi0,Vp,contract_whole_torus_boundaryMPS);#normalize psi0 
