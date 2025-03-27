@@ -39,89 +39,6 @@ function load_fPEPS_from_iPEPS(Lx::Int,Ly::Int,filenm::String,to_dense)
     return psi,Vp,Vv
 end
 
-function load_fPEPS(Lx::Int,Ly::Int,filenm::String)
-    data=load("saved_states/"*filenm*".jld2");
-    if haskey(data,"E")
-        println("Double layer method gives energy "*string(data["E"]));
-    end
-    if haskey(data,"E_sz0")
-        println("Double layer method gives energy "*string(data["E_sz0"])*" in sz=0 sector");
-    end
-    if haskey(data,"psi")
-        psi0=data["psi"];
-    elseif haskey(data,"T_set")
-        psi0=data["T_set"];
-    end
-    @assert Lx==size(psi0,1);
-    @assert Ly==size(psi0,2);
-    psi=Matrix{TensorMap}(undef,Lx,Ly);
-    psi[:]=psi0[:];
-    Vp=space(psi[2,2],5);
-    return psi,Vp
-end
-
-function generate_obc_from_iPEPS(A,Lx,Ly)
-
-    
-    P=zeros(1,3);P[1,1]=1;
-    # P_L=TensorMap(P,Rep[SU₂](0=>1),space(A,1));
-    # P_D=TensorMap(P,Rep[SU₂](0=>1),space(A,2));
-    P_L=TensorMap(P,Rep[U₁](0=>1),space(A,1));
-    P_D=TensorMap(P,Rep[U₁](0=>1),space(A,2));
-
-    psi=Matrix{TensorMap}(undef,Lx,Ly);#PBC-PBC
-    for cx=2:Lx-1
-        for cy=2:Ly-1
-            psi[cx,cy]=A;
-        end
-    end
-
-    cx=1;
-    for cy=2:Ly-1
-        @tensor T[:]:=A[1,-2,-3,-4,-5]*P_L[-1,1];
-        psi[cx,cy]=T;
-    end
-
-    cx=Lx;
-    for cy=2:Ly-1
-        @tensor T[:]:=A[-1,-2,1,-4,-5]*P_L'[1,-3];
-        psi[cx,cy]=T;
-    end
-
-    cy=1;
-    for cx=2:Lx-1
-        @tensor T[:]:=A[-1,1,-3,-4,-5]*P_D[-2,1];
-        psi[cx,cy]=T;
-    end
-
-    cy=Ly;
-    for cx=2:Lx-1
-        @tensor T[:]:=A[-1,-2,-3,1,-5]*P_D'[1,-4];
-        psi[cx,cy]=T;
-    end
-
-    cx=1;
-    cy=1;
-    @tensor T[:]:=A[1,2,-3,-4,-5]*P_L[-1,1]*P_D[-2,2];
-    psi[cx,cy]=T;
-
-    cx=Lx;
-    cy=1;
-    @tensor T[:]:=A[-1,2,1,-4,-5]*P_L'[1,-3]*P_D[-2,2];
-    psi[cx,cy]=T;
-
-    cx=1;
-    cy=Ly;
-    @tensor T[:]:=A[1,-2,-3,2,-5]*P_L[-1,1]*P_D'[2,-4];
-    psi[cx,cy]=T;
-
-    cx=Lx;
-    cy=Ly;
-    @tensor T[:]:=A[-1,-2,1,2,-5]*P_L'[1,-3]*P_D'[2,-4];
-    psi[cx,cy]=T;
-
-    return psi
-end
 
 
 
@@ -271,53 +188,7 @@ function apply_sampling_projector(fPEPS::Matrix{TensorMap},config::Matrix,sample
 end
 
 
-function decompose_physical_legs(fPEPS0::Matrix{TensorMap},Vp::ComplexSpace)
-    Lx,Ly=size(fPEPS0);
-    fPEPS_decomposed=Array{TensorMap}(undef,Lx,Ly,TensorKit.dim(Vp));
-    @assert TensorKit.dim(Vp)==2;
-    
-    for cp=1:TensorKit.dim(Vp)
-        for cx=1:Lx
-            for cy=1:Ly
-                T=fPEPS0[cx,cy];
 
-                if Rank(T)==3
-                    fPEPS_decomposed[cx,cy,cp]=TensorMap(T[:,:,cp],space(T,1)*space(T,2),ProductSpace{ComplexSpace, 0}());
-                elseif Rank(T)==4
-                    fPEPS_decomposed[cx,cy,cp]=TensorMap(T[:,:,:,cp],space(T,1)*space(T,2)*space(T,3),ProductSpace{ComplexSpace, 0}());
-                elseif Rank(T)==5
-                    fPEPS_decomposed[cx,cy,cp]=TensorMap(T[:,:,:,:,cp],space(T,1)*space(T,2)*space(T,3)*space(T,4),ProductSpace{ComplexSpace, 0}());
-                end
-            end
-        end
-    end
-    return fPEPS_decomposed
-end
-
-function apply_sampling_projector(fPEPS::Matrix{TensorMap},config::Matrix,sample::Matrix{TensorMap},Vp::ComplexSpace)
-    sample=deepcopy(fPEPS);
-    Lx,Ly=size(fPEPS);
-
-    for cx=1:Lx
-        for cy=1:Ly
-            T=fPEPS[cx,cy];
-            if config[cx,cy]==1
-                pind=1
-            elseif config[cx,cy]==-1
-                pind=2;
-            end
-
-            if Rank(T)==3
-                sample[cx,cy]=TensorMap(T[:,:,pind],space(T,1)*space(T,2),ProductSpace{ComplexSpace, 0}());
-            elseif Rank(T)==4
-                sample[cx,cy]=TensorMap(T[:,:,:,pind],space(T,1)*space(T,2)*space(T,3),ProductSpace{ComplexSpace, 0}());
-            elseif Rank(T)==5
-                sample[cx,cy]=TensorMap(T[:,:,:,:,pind],space(T,1)*space(T,2)*space(T,3)*space(T,4),ProductSpace{ComplexSpace, 0}());
-            end
-        end
-    end
-    return sample
-end
 
 
 function apply_sampling_projector(fPEPS,Lx::Int,Ly::Int,config::Vector,sample,Vp)
@@ -381,28 +252,8 @@ function contract_sample(psi_decomposed::Array{TensorMap},Lx::Int,Ly::Int,config
     return Norm,psi_sample, trun_err
 end
 
-# function contract_sample(psi::Matrix{TensorMap},Lx::Int,Ly::Int,config::Vector,Vp,contract_fun::Function)
-#     return contract_sample(psi,Lx,Ly,reshape(config,Lx,Ly),Vp,contract_fun)
-# end
 
-function partial_contract_sample(psi_decomposed::Array{TensorMap},config::Vector,psi_sample_old::Matrix{TensorMap}, Vp::GradedSpace,contract_history_::disk_contract_history)
-    psi_sample=pick_sample(psi_decomposed,config, psi_sample_old);
-    if isa(Vp,GradedSpace{U1Irrep, TensorKit.SortedVectorDict{U1Irrep, Int64}})
-        psi_sample=shift_pleg(psi_sample);
-    end
-    Norm,trun_errs, contract_history_new=contract_partial_disk(psi_sample,config,contract_history_, chi)
 
-    #################################
-    #for verification, need to comment later
-    # jldsave("test2.jld2";psi_decomposed,config,contract_history_,contract_history_new,chi)
-    # verify_contract_history(psi_sample,contract_history_new, chi);
-    #################################
-    global ite_num
-    if mod(ite_num,GC_spacing)==0
-        GC.gc(true);
-    end
-    return Norm,psi_sample, trun_errs, contract_history_new
-end
 
 function partial_contract_sample(psi_decomposed::Array{TensorMap},config::Vector,psi_sample_old::Matrix{TensorMap}, Vp::GradedSpace,contract_history_::torus_contract_history)
     psi_sample=pick_sample(psi_decomposed,config, psi_sample_old);
